@@ -113,9 +113,13 @@ const useSimulation = true;
     let distanceToGoal = null;
     let distanceCovered = 0;
 
-    let countdownDuration = 5 * 60 * 1000; // 5 Minuten in ms
+       // Countdown Handling
+    const countdownTotal = 5 * 60 * 1000; // 5 Minuten in ms
+    let countdownRemaining = countdownTotal;
     let countdownStart = null;
     let countdownInterval = null;
+    let pauseTime = null;
+    let totalPausedTime = 0;
 
     let averageSpeed = 0; // m/s
 let lapCountEstimate = 0;
@@ -181,15 +185,16 @@ window.addEventListener('DOMContentLoaded', () => {
       infoBox.innerHTML = infoBox.innerHTML.replace(/⏳ Timer: .*$/m, `⏳ Timer: ${timeStr}`);
     }
 
-    function startCountdown() {
+       function startCountdown() {
       countdownStart = Date.now();
       if (countdownInterval) clearInterval(countdownInterval);
       countdownInterval = setInterval(() => {
         const elapsed = Date.now() - countdownStart;
-        const remaining = countdownDuration - elapsed;
+        const remaining = countdownRemaining - elapsed;
 
         if (remaining <= 0) {
           clearInterval(countdownInterval);
+          countdownRemaining = 0;
           updateInfoBoxTime(0);
         } else {
           updateInfoBoxTime(remaining);
@@ -207,8 +212,11 @@ window.addEventListener('DOMContentLoaded', () => {
   let avgSpeedText = "📈 Ø-Tempo: –";
   let suggSpeedText = "🌟 Ziel: – / –";
 
-  if (lastUpdateTime) {
-    const delta = Date.now() - lastUpdateTime;
+    if (lastUpdateTime) {
+    let delta = Date.now() - lastUpdateTime;
+    if (gpsPaused && pauseTime) {
+      delta -= Date.now() - pauseTime;
+    }
     timeText = `⏱️ Letztes Update: ${(delta / 1000).toFixed(2)} s`;
   }
   if (currentSpeed !== null) {
@@ -230,12 +238,18 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
    if (firstTrackingTime && distanceCovered > 0) {
-    const elapsedSec = (Date.now() - firstTrackingTime) / 1000;
-    averageSpeed = distanceCovered / elapsedSec;
+    const paused = totalPausedTime + (gpsPaused && pauseTime ? Date.now() - pauseTime : 0);
+    const elapsedSec = (Date.now() - firstTrackingTime - paused) / 1000;
+    if (elapsedSec > 0) {
+      averageSpeed = distanceCovered / elapsedSec;
+    }
 
-    const remainingTime = (countdownDuration - (Date.now() - countdownStart)) / 1000;
-    const lapLength = totalDistance;
-    if (lapLength > 0 && remainingTime > 0) {
+    let remainingTime = countdownRemaining;
+    if (countdownStart !== null) {
+      remainingTime = countdownRemaining - (Date.now() - countdownStart);
+    }
+    remainingTime /= 1000;
+      if (lapLength > 0 && remainingTime > 0) {
       lapCountEstimate = (averageSpeed * remainingTime) / lapLength;
 
       const lowerTarget = Math.floor(lapCountEstimate);
@@ -324,13 +338,16 @@ window.addEventListener('DOMContentLoaded', () => {
       document.getElementById("startBtn").disabled = true;
       document.getElementById("backBtn").disabled = true;
 
-      turfLine = turf.lineString(routePoints.map(p => [p[1], p[0]]));
+              turfLine = turf.lineString(routePoints.map(p => [p[1], p[0]]));
 
       simulationDistance = 0;
       firstPositionSet = false;
       speedSamples = [];
       distanceCovered = 0;
       distanceToGoal = totalDistance;
+      countdownRemaining = countdownTotal;
+      totalPausedTime = 0;
+      pauseTime = null;
 
       startLiveGPS();
     });
@@ -345,13 +362,27 @@ window.addEventListener('DOMContentLoaded', () => {
           navigator.geolocation.clearWatch(gpsWatcher);
           gpsWatcher = null;
         }
+        if (countdownInterval) {
+          countdownRemaining = Math.max(countdownRemaining - (Date.now() - countdownStart), 0);
+          clearInterval(countdownInterval);
+          countdownStart = null;
+          updateInfoBoxTime(countdownRemaining);
+        }
+        pauseTime = Date.now();
         gpsPaused = true;
         toggleBtn.innerText = "▶️ Weiter";
         toggleBtn.style.backgroundColor = "green";
       } else {
         // weiter
+        if (pauseTime !== null) {
+          const pauseDelta = Date.now() - pauseTime;
+          lastUpdateTime += pauseDelta;
+          totalPausedTime += pauseDelta;
+          pauseTime = null;
+        }
         startLiveGPS();
         gpsPaused = false;
+        startCountdown();
         toggleBtn.innerText = "⏸️ Pause";
         toggleBtn.style.backgroundColor = "orange";
       }
