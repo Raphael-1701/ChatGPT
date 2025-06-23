@@ -108,10 +108,11 @@ const useSimulation = true;
     let lastUpdateTime = null;
     let currentSpeed = null;
     let gpsWatcher = null;
-    let gpsPaused = false;
+let gpsPaused = false;
 
-    let distanceToGoal = null;
-    let distanceCovered = 0;
+let distanceToGoal = null;
+let distanceCovered = 0;
+let finalDistance = null;
 
        // Countdown Handling
     const countdownTotal = 5 * 60 * 1000; // 5 Minuten in ms
@@ -195,10 +196,11 @@ window.addEventListener('DOMContentLoaded', () => {
         const elapsed = Date.now() - countdownStart;
         const remaining = countdownRemaining - elapsed;
 
-        if (remaining <= 0) {
+         if (remaining <= 0) {
           clearInterval(countdownInterval);
           countdownRemaining = 0;
           updateInfoBoxTime(0);
+          finishRun();
         } else {
           updateInfoBoxTime(remaining);
         }
@@ -532,6 +534,29 @@ function onGpsPosition(pos) {
   distanceCovered = totalDistanceTravelled;
   distanceToGoal = Math.max((lapsCompleted + 1) * totalDistance - distanceCovered, 0);
   centerMap(lat, lng);
+}
+
+function finishRun() {
+  if (!trackingStarted) return;
+
+  trackingStarted = false;
+
+  if (simulationInterval) {
+    clearInterval(simulationInterval);
+    simulationInterval = null;
+  }
+  if (gpsWatcher !== null) {
+    navigator.geolocation.clearWatch(gpsWatcher);
+    gpsWatcher = null;
+  }
+
+  finalDistance = distanceToGoal;
+  toggleBtn.disabled = true;
+
+  if (finalDistance !== null) {
+    infoBox.innerHTML += `<br>🏁 Zielabstand: ${finalDistance.toFixed(1)} m`;
+    alert(`Abstand zur Ziellinie: ${finalDistance.toFixed(1)} m`);
+  }
 }
 
 </script>
