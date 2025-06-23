@@ -249,9 +249,10 @@ window.addEventListener('DOMContentLoaded', () => {
       remainingTime = countdownRemaining - (Date.now() - countdownStart);
     }
     remainingTime /= 1000;
-      if (lapLength > 0 && remainingTime > 0) {
-      lapCountEstimate = (averageSpeed * remainingTime) / lapLength;
 
+    const lapLength = totalDistance;
+    if (lapLength > 0 && remainingTime > 0) {
+      lapCountEstimate = (averageSpeed * remainingTime) / lapLength;
       const lowerTarget = Math.floor(lapCountEstimate);
       const upperTarget = lowerTarget + 1;
 
