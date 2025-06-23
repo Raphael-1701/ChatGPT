@@ -137,7 +137,8 @@ let lapsCompleted = 0;
 let totalDistance = 0;
 
 let speedSamples = [];
-  
+let smoothedSpeed = null;
+const SMOOTHING_FACTOR = 0.2; // Einfluss der aktuellen Geschwindigkeit
 
 function pointFromLatLng([lat, lng]) {
   return turf.point([lng, lat]);
@@ -255,33 +256,42 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     remainingTime /= 1000;
 
-    const lapLength = totalDistance;
-    const baseline = averageSpeed > 0 ? averageSpeed : (currentSpeed || 0);
+       const lapLength = totalDistance;
+    const baseCandidate = smoothedSpeed !== null
+      ? 0.7 * smoothedSpeed + 0.3 * averageSpeed
+      : (averageSpeed || 0);
+    const baseline = baseCandidate > 0 ? baseCandidate : 0;
     if (remainingTime > 0 && lapLength > 0 && baseline > 0) {
       const predictedLaps = (distanceCovered + baseline * remainingTime) / lapLength;
       let lowerTarget = Math.floor(predictedLaps);
       if (lowerTarget < lapsCompleted) lowerTarget = lapsCompleted;
       const upperTarget = lowerTarget + 1;
 
-      const speedLower = (lowerTarget * lapLength - distanceCovered) / remainingTime;
-      const speedUpper = (upperTarget * lapLength - distanceCovered) / remainingTime;
+      let speedLower = (lowerTarget * lapLength - distanceCovered) / remainingTime;
+      let speedUpper = (upperTarget * lapLength - distanceCovered) / remainingTime;
+
+      if (currentSpeed && speedLower >= currentSpeed) speedLower = currentSpeed * 0.9;
+      if (currentSpeed && speedUpper <= currentSpeed) speedUpper = currentSpeed * 1.1;
 
       const maxSpeed = 70 / 3.6; // 70 km/h in m/s
       const validLower = speedLower > 0 && speedLower <= maxSpeed;
       const validUpper = speedUpper > 0 && speedUpper <= maxSpeed;
 
+      const lapsLower = (distanceCovered + speedLower * remainingTime) / lapLength;
+      const lapsUpper = (distanceCovered + speedUpper * remainingTime) / lapLength;
+
       if (validLower && validUpper) {
-        suggestedSpeedLower = (speedLower * 3.6).toFixed(1);
+            suggestedSpeedLower = (speedLower * 3.6).toFixed(1);
         suggestedSpeedUpper = (speedUpper * 3.6).toFixed(1);
-        suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} ↓ / ${suggestedSpeedUpper} ↑ km/h`;
+        suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} ↓ (${lapsLower.toFixed(1)} R) / ${suggestedSpeedUpper} ↑ (${lapsUpper.toFixed(1)} R) km/h`;
       } else if (validLower) {
-        suggestedSpeedLower = (speedLower * 3.6).toFixed(1);
+            suggestedSpeedLower = (speedLower * 3.6).toFixed(1);
         suggestedSpeedUpper = null;
-        suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} km/h`;
+        suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} km/h (${lapsLower.toFixed(1)} R)`;
       } else if (validUpper) {
-        suggestedSpeedLower = (speedUpper * 3.6).toFixed(1);
+             suggestedSpeedLower = (speedUpper * 3.6).toFixed(1);
         suggestedSpeedUpper = null;
-        suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} km/h`;
+        suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} km/h (${lapsUpper.toFixed(1)} R)`;
       }
     }
   }
@@ -499,6 +509,11 @@ function onGpsPosition(pos) {
  
   if (currentSpeed !== null) {
       speedSamples.push(currentSpeed);
+      if (smoothedSpeed === null) {
+        smoothedSpeed = currentSpeed;
+      } else {
+        smoothedSpeed = smoothedSpeed * (1 - SMOOTHING_FACTOR) + currentSpeed * SMOOTHING_FACTOR;
+      }
     }
      if (speedSamples.length > 0) {
       const sum = speedSamples.reduce((a, b) => a + b, 0);
@@ -553,11 +568,17 @@ function finishRun() {
   finalDistance = distanceToGoal;
   toggleBtn.disabled = true;
 
-  if (finalDistance !== null) {
-    infoBox.innerHTML += `<br>🏁 Zielabstand: ${finalDistance.toFixed(1)} m`;
-    alert(`Abstand zur Ziellinie: ${finalDistance.toFixed(1)} m`);
+    if (finalDistance !== null) {
+      const totalLaps = distanceCovered / totalDistance;
+      const finalAvg = averageSpeed * 3.6;
+      const finalTime = (Date.now() - firstTrackingTime - totalPausedTime) / 1000;
+      infoBox.innerHTML += `<br>🏁 Zielabstand: ${finalDistance.toFixed(1)} m`;
+      infoBox.innerHTML += `<br>🔄 Gefahrene Runden: ${totalLaps.toFixed(2)}`;
+      infoBox.innerHTML += `<br>📈 Ø-Tempo: ${finalAvg.toFixed(1)} km/h`;
+      infoBox.innerHTML += `<br>⏲️ Zeit: ${finalTime.toFixed(1)} s`;
+      alert(`Abstand zur Ziellinie: ${finalDistance.toFixed(1)} m`);
+    }
   }
-}
 
 </script>
 
