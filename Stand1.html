@@ -41,6 +41,18 @@
       min-width: 160px;
       line-height: 1.3em;
     }
+      .slider-container {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: white;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-family: sans-serif;
+      font-size: 14px;
+      box-shadow: 0 0 4px rgba(0,0,0,0.3);
+      z-index: 1000;
+    }
   </style>
 </head>
 <body>
@@ -59,8 +71,8 @@
 
   <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
   <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-
-  <script>
+  (function() {
+"use strict";
     // Karte initialisieren (mit Default View, wird später durch Standort überschrieben)
    const map = L.map('map').setView([47.7, 9.0], 17); 
  const satellite = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -76,6 +88,12 @@ const labels = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/servic
 L.layerGroup([satellite, labels]).addTo(map);
 
 const useSimulation = true;
+const startBtn = document.getElementById("startBtn");
+const backBtn = document.getElementById("backBtn");
+const toggleBtn = document.getElementById("toggleBtn");
+const infoBox = document.getElementById("infoBox");
+let simSpeedSlider;
+let simSpeedLabel;
 
     // Beim Laden einmal aktuellen Standort holen und Karte dahin zentrieren
     if (!useSimulation && navigator.geolocation) {
@@ -114,9 +132,8 @@ let distanceToGoal = null;
 let distanceCovered = 0;
 let finalDistance = null;
 
-       // Countdown Handling
-    const countdownTotal = 5 * 60 * 1000; // 5 Minuten in ms
-    let countdownRemaining = countdownTotal;
+        const COUNTDOWN_TOTAL = 5 * 60 * 1000; // 5 Minuten in ms
+    let countdownRemaining = COUNTDOWN_TOTAL;
     let countdownStart = null;
     let countdownInterval = null;
     let pauseTime = null;
@@ -140,6 +157,8 @@ let speedSamples = [];
 let smoothedSpeed = null;
 const SMOOTHING_FACTOR = 0.2; // Einfluss der aktuellen Geschwindigkeit
 
+const MAX_SPEED = 70 / 3.6; // 70 km/h in m/s
+
 function pointFromLatLng([lat, lng]) {
   return turf.point([lng, lat]);
 }
@@ -156,23 +175,16 @@ function kmhText(label, value) {
   return value != null ? `${label}: ${(value * 3.6).toFixed(1)} km/h` : `${label}: –`;
 }
 
-
-window.addEventListener('DOMContentLoaded', () => {
-  const slider = document.getElementById("simSpeedSlider");
-  const label = document.getElementById("simSpeedLabel");
-  if (slider && label) {
-    slider.addEventListener("input", () => {
-      simulationSpeedKmh = Number(slider.value);
-      label.textContent = slider.value;
+window.addEventListener("DOMContentLoaded", () => {
+  simSpeedSlider = document.getElementById("simSpeedSlider");
+  simSpeedLabel = document.getElementById("simSpeedLabel");
+  if (simSpeedSlider && simSpeedLabel) {
+    simSpeedSlider.addEventListener("input", () => {
+      simulationSpeedKmh = Number(simSpeedSlider.value);
+      simSpeedLabel.textContent = simSpeedSlider.value;
     });
   }
 });
-
-
-
-
-    const infoBox = document.getElementById("infoBox");
-    const toggleBtn = document.getElementById("toggleBtn");
 
     // Timer Anzeige in infoBox separat updaten
     function formatTime(ms) {
@@ -273,9 +285,8 @@ window.addEventListener('DOMContentLoaded', () => {
       if (currentSpeed && speedLower >= currentSpeed) speedLower = currentSpeed * 0.9;
       if (currentSpeed && speedUpper <= currentSpeed) speedUpper = currentSpeed * 1.1;
 
-      const maxSpeed = 70 / 3.6; // 70 km/h in m/s
-      const validLower = speedLower > 0 && speedLower <= maxSpeed;
-      const validUpper = speedUpper > 0 && speedUpper <= maxSpeed;
+      const validLower = speedLower > 0 && speedLower <= MAX_SPEED;
+      const validUpper = speedUpper > 0 && speedUpper <= MAX_SPEED;
 
       const lapsLower = (distanceCovered + speedLower * remainingTime) / lapLength;
       const lapsUpper = (distanceCovered + speedUpper * remainingTime) / lapLength;
@@ -340,7 +351,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     // "Zurück"-Button - letzter Punkt löschen
-    document.getElementById("backBtn").addEventListener("click", () => {
+       backBtn.addEventListener("click", () => {
       if (trackingStarted || routePoints.length === 0) return;
 
       routePoints.pop();
@@ -352,7 +363,7 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     // "Start Tracking"-Button
-    document.getElementById("startBtn").addEventListener("click", () => {
+      startBtn.addEventListener("click", () => {
       if (routePoints.length < 2) {
         alert("Bitte zuerst eine Strecke zeichnen!");
         return;
@@ -367,8 +378,8 @@ window.addEventListener('DOMContentLoaded', () => {
       drawPolyline();
 
       trackingStarted = true;
-      document.getElementById("startBtn").disabled = true;
-      document.getElementById("backBtn").disabled = true;
+      startBtn.disabled = true;
+      backBtn.disabled = true;
 
               turfLine = turf.lineString(routePoints.map(p => [p[1], p[0]]));
 
@@ -380,7 +391,7 @@ window.addEventListener('DOMContentLoaded', () => {
       totalDistanceTravelled = 0;
       prevAlong = null;
       lapsCompleted = 0;
-      countdownRemaining = countdownTotal;
+      countdownRemaining = COUNTDOWN_TOTAL;
       totalPausedTime = 0;
       pauseTime = null;
 
@@ -457,10 +468,9 @@ function startSimulation() {
     if (!trackingStarted || gpsPaused) return;
 
     // Aktuelle Geschwindigkeit vom Slider auslesen
-    const slider = document.getElementById("simSpeedSlider");
-    if (slider) {
-      simulationSpeedKmh = Number(slider.value);
-      document.getElementById("simSpeedLabel").textContent = simulationSpeedKmh;
+      if (simSpeedSlider) {
+      simulationSpeedKmh = Number(simSpeedSlider.value);
+      if (simSpeedLabel) simSpeedLabel.textContent = simSpeedSlider.value;
     }
 
     const now = Date.now();
@@ -579,13 +589,12 @@ function finishRun() {
       alert(`Abstand zur Ziellinie: ${finalDistance.toFixed(1)} m`);
     }
   }
-
+})();
 </script>
 
-<div style="position:absolute; bottom:10px; left:10px; background:white; padding:8px 12px; border-radius:8px; font-family:sans-serif; font-size:14px; box-shadow:0 0 4px rgba(0,0,0,0.3); z-index:1000;">
-  Geschwindigkeit (km/h): <span id="simSpeedLabel">30</span><br>
+<div class="slider-container">
+    Geschwindigkeit (km/h): <span id="simSpeedLabel">30</span><br>
   <input type="range" id="simSpeedSlider" min="5" max="100" value="30">
 </div>
-
 </body>
 </html>
