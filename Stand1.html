@@ -250,19 +250,25 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     remainingTime /= 1000;
 
-    const lapLength = totalDistance;
-    if (lapLength > 0 && remainingTime > 0) {
-      lapCountEstimate = (averageSpeed * remainingTime) / lapLength;
-      const lowerTarget = Math.floor(lapCountEstimate);
-      const upperTarget = lowerTarget + 1;
+     const lapLength = totalDistance;
+    const remainingDist = (typeof distanceToGoal === 'number') ? distanceToGoal : 0;
+    if (remainingTime > 0 && lapLength > 0) {
+      const speedCurrent = remainingDist / remainingTime;
+      const speedCurrentKmh = (speedCurrent * 3.6).toFixed(1);
 
-      const speedLower = (lapLength * lowerTarget) / remainingTime;
-      const speedUpper = (lapLength * upperTarget) / remainingTime;
-
-      suggestedSpeedLower = (speedLower * 3.6).toFixed(1);
-      suggestedSpeedUpper = (speedUpper * 3.6).toFixed(1);
-
-      suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} ↓ / ${suggestedSpeedUpper} ↑ km/h`;
+      const maxRealisticSpeed = 50 / 3.6; // 50 km/h in m/s
+      const timeAtMax = (remainingDist + lapLength) / maxRealisticSpeed;
+      if (timeAtMax <= remainingTime) {
+        const speedNextLap = (remainingDist + lapLength) / remainingTime;
+        const speedNextLapKmh = (speedNextLap * 3.6).toFixed(1);
+        suggestedSpeedLower = speedCurrentKmh;
+        suggestedSpeedUpper = speedNextLapKmh;
+        suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} ↓ / ${suggestedSpeedUpper} ↑ km/h`;
+      } else {
+        suggestedSpeedLower = speedCurrentKmh;
+        suggestedSpeedUpper = null;
+        suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} km/h`;
+      }
     }
   }
 
