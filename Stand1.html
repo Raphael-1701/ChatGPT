@@ -122,13 +122,16 @@ const useSimulation = true;
     let totalPausedTime = 0;
 
     let averageSpeed = 0; // m/s
-let lapCountEstimate = 0;
 let suggestedSpeedLower = null;
 let suggestedSpeedUpper = null;
 let simulationInterval = null;
 let simulationDistance = 0;
 let firstPositionSet = false;
 let firstTrackingTime = null;
+
+let totalDistanceTravelled = 0;
+let prevAlong = null;
+let lapsCompleted = 0;
 
 let totalDistance = 0;
 
@@ -244,33 +247,43 @@ window.addEventListener('DOMContentLoaded', () => {
       averageSpeed = distanceCovered / elapsedSec;
     }
 
-    let remainingTime = countdownRemaining;
+       let remainingTime = countdownRemaining;
     if (countdownStart !== null) {
       remainingTime = countdownRemaining - (Date.now() - countdownStart);
     }
     remainingTime /= 1000;
 
-     const lapLength = totalDistance;
-    const remainingDist = (typeof distanceToGoal === 'number') ? distanceToGoal : 0;
-    if (remainingTime > 0 && lapLength > 0) {
-      const speedCurrent = remainingDist / remainingTime;
-      const speedCurrentKmh = (speedCurrent * 3.6).toFixed(1);
+    const lapLength = totalDistance;
+    const baseline = averageSpeed > 0 ? averageSpeed : (currentSpeed || 0);
+    if (remainingTime > 0 && lapLength > 0 && baseline > 0) {
+      const predictedLaps = (distanceCovered + baseline * remainingTime) / lapLength;
+      let lowerTarget = Math.floor(predictedLaps);
+      if (lowerTarget < lapsCompleted) lowerTarget = lapsCompleted;
+      const upperTarget = lowerTarget + 1;
 
-      const maxRealisticSpeed = 50 / 3.6; // 50 km/h in m/s
-      const timeAtMax = (remainingDist + lapLength) / maxRealisticSpeed;
-      if (timeAtMax <= remainingTime) {
-        const speedNextLap = (remainingDist + lapLength) / remainingTime;
-        const speedNextLapKmh = (speedNextLap * 3.6).toFixed(1);
-        suggestedSpeedLower = speedCurrentKmh;
-        suggestedSpeedUpper = speedNextLapKmh;
+      const speedLower = (lowerTarget * lapLength - distanceCovered) / remainingTime;
+      const speedUpper = (upperTarget * lapLength - distanceCovered) / remainingTime;
+
+      const maxSpeed = 70 / 3.6; // 70 km/h in m/s
+      const validLower = speedLower > 0 && speedLower <= maxSpeed;
+      const validUpper = speedUpper > 0 && speedUpper <= maxSpeed;
+
+      if (validLower && validUpper) {
+        suggestedSpeedLower = (speedLower * 3.6).toFixed(1);
+        suggestedSpeedUpper = (speedUpper * 3.6).toFixed(1);
         suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} ↓ / ${suggestedSpeedUpper} ↑ km/h`;
-      } else {
-        suggestedSpeedLower = speedCurrentKmh;
+      } else if (validLower) {
+        suggestedSpeedLower = (speedLower * 3.6).toFixed(1);
+        suggestedSpeedUpper = null;
+        suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} km/h`;
+      } else if (validUpper) {
+        suggestedSpeedLower = (speedUpper * 3.6).toFixed(1);
         suggestedSpeedUpper = null;
         suggSpeedText = `🌟 Ziel: ${suggestedSpeedLower} km/h`;
       }
     }
   }
+
 
   const timerLine = infoBox.innerHTML.match(/⏳ Timer: .*/);
   infoBox.innerHTML = `${timeText}<br>${speedText}<br>${avgSpeedText}<br>${restDistText}<br>${coveredDistText}<br>${totalDistText}<br>${suggSpeedText}<br>` + (timerLine ? timerLine[0] : `⏳ Timer: 05:00.000`);
@@ -347,11 +360,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
               turfLine = turf.lineString(routePoints.map(p => [p[1], p[0]]));
 
-      simulationDistance = 0;
+       simulationDistance = 0;
       firstPositionSet = false;
       speedSamples = [];
       distanceCovered = 0;
       distanceToGoal = totalDistance;
+      totalDistanceTravelled = 0;
+      prevAlong = null;
+      lapsCompleted = 0;
       countdownRemaining = countdownTotal;
       totalPausedTime = 0;
       pauseTime = null;
@@ -499,10 +515,22 @@ function onGpsPosition(pos) {
   pointMarkers.push(gpsMarker);
 
  // location is reported in kilometers along the line
-  const distanceAlong = snapped.properties.location * 1000;
-  distanceCovered = distanceAlong;
-  distanceToGoal = Math.max(totalDistance - distanceCovered, 0);
+     const distanceAlong = snapped.properties.location * 1000;
 
+  if (prevAlong !== null) {
+    let diff = distanceAlong - prevAlong;
+    if (diff < -totalDistance * 0.5) {
+      diff = (totalDistance - prevAlong) + distanceAlong;
+      lapsCompleted++;
+    }
+    if (diff > 0) {
+      totalDistanceTravelled += diff;
+    }
+  }
+  prevAlong = distanceAlong;
+
+  distanceCovered = totalDistanceTravelled;
+  distanceToGoal = Math.max((lapsCompleted + 1) * totalDistance - distanceCovered, 0);
   centerMap(lat, lng);
 }
 
