@@ -75,9 +75,10 @@ const labels = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/servic
 
 L.layerGroup([satellite, labels]).addTo(map);
 
+const useSimulation = true;
 
     // Beim Laden einmal aktuellen Standort holen und Karte dahin zentrieren
-    if (navigator.geolocation) {
+    if (!useSimulation && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const lat = pos.coords.latitude;
@@ -93,7 +94,7 @@ L.layerGroup([satellite, labels]).addTo(map);
           maximumAge: 0
         }
       );
-    } else {
+    } else if (!useSimulation) {
       console.warn("Geolocation wird nicht unterstützt, Karte bleibt auf Default.");
     }
 
@@ -120,8 +121,6 @@ L.layerGroup([satellite, labels]).addTo(map);
 let lapCountEstimate = 0;
 let suggestedSpeedLower = null;
 let suggestedSpeedUpper = null;
-
-const useSimulation = true; 
 let simulationInterval = null;
 let simulationDistance = 0;
 let firstPositionSet = false;
@@ -230,12 +229,9 @@ window.addEventListener('DOMContentLoaded', () => {
       avgSpeedText = `📈 Ø-Tempo: ${kmh} km/h`;
     }
 
-  const elapsed = countdownStart ? (Date.now() - countdownStart) / 1000 : 0;
    if (firstTrackingTime && distanceCovered > 0) {
-    const elapsed = (Date.now() - firstTrackingTime) / 1000;
-    averageSpeed = distanceCovered / elapsed;
-    const kmh = (averageSpeed * 3.6).toFixed(1);
-    avgSpeedText = `📈 Ø-Tempo: ${kmh} km/h`;
+    const elapsedSec = (Date.now() - firstTrackingTime) / 1000;
+    averageSpeed = distanceCovered / elapsedSec;
 
     const remainingTime = (countdownDuration - (Date.now() - countdownStart)) / 1000;
     const lapLength = totalDistance;
@@ -321,7 +317,7 @@ window.addEventListener('DOMContentLoaded', () => {
         routePoints.push(routePoints[0]);
       }
 
-      updateDistance();
+        updateDistance();
       drawPolyline();
 
       trackingStarted = true;
@@ -330,11 +326,13 @@ window.addEventListener('DOMContentLoaded', () => {
 
       turfLine = turf.lineString(routePoints.map(p => [p[1], p[0]]));
 
+      simulationDistance = 0;
+      firstPositionSet = false;
+      speedSamples = [];
       distanceCovered = 0;
       distanceToGoal = totalDistance;
 
       startLiveGPS();
-      startCountdown();
     });
 
     // Umschaltbutton Pause / Weiter
@@ -462,30 +460,10 @@ function onGpsPosition(pos) {
   const gpsMarker = L.circleMarker([lat, lng], { color: 'yellow', radius: 4 }).addTo(map);
   pointMarkers.push(gpsMarker);
 
-  let nearestIndex = 0;
-  let minDist = Infinity;
-  for (let i = 0; i < routePoints.length; i++) {
-    const pt = routePoints[i];
-    const dist = turf.distance(
-      turf.point([pt[1], pt[0]]),
-      turf.point([snapped.geometry.coordinates[0], snapped.geometry.coordinates[1]]),
-      { units: 'meters' }
-    );
-    if (dist < minDist) {
-      minDist = dist;
-      nearestIndex = i;
-    }
-  }
-
-  let remainingDist = 0;
-  const n = routePoints.length;
-  for (let i = nearestIndex; i != 0; i = (i + 1) % n) {
-    const current = turf.point([routePoints[i][1], routePoints[i][0]]);
-    const next = turf.point([routePoints[(i + 1) % n][1], routePoints[(i + 1) % n][0]]);
-    remainingDist += turf.distance(current, next, { units: 'meters' });
-  }
-  distanceToGoal = remainingDist;
-  distanceCovered = totalDistance - distanceToGoal;
+ // location is reported in kilometers along the line
+  const distanceAlong = snapped.properties.location * 1000;
+  distanceCovered = distanceAlong;
+  distanceToGoal = Math.max(totalDistance - distanceCovered, 0);
 
   centerMap(lat, lng);
 }
