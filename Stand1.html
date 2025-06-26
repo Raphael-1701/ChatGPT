@@ -290,8 +290,11 @@ window.addEventListener("DOMContentLoaded", () => {
       const validLower = speedLower > 0 && speedLower <= MAX_SPEED;
       const validUpper = speedUpper > 0 && speedUpper <= MAX_SPEED;
 
-      const lapsLower = (distanceCovered + speedLower * remainingTime) / lapLength;
-      const lapsUpper = (distanceCovered + speedUpper * remainingTime) / lapLength;
+      const lapsLowerTotal = (distanceCovered + speedLower * remainingTime) / lapLength;
+      const lapsUpperTotal = (distanceCovered + speedUpper * remainingTime) / lapLength;
+      const currentLaps = distanceCovered / lapLength;
+      const lapsLower = Math.max(lapsLowerTotal - currentLaps, 0);
+      const lapsUpper = Math.max(lapsUpperTotal - currentLaps, 0);
 
       if (validLower && validUpper) {
             suggestedSpeedLower = (speedLower * 3.6).toFixed(1);
