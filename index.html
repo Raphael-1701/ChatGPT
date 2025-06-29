@@ -24,6 +24,7 @@
     }
     #startBtn { left: 10px; }
     #toggleBtn { left: 140px; background-color: orange; }
+    #setStartBtn { left: 270px; background-color: green; }
 
     #infoBox {
       position: absolute;
@@ -45,6 +46,7 @@
 <body>
   <button id="startBtn" class="button">📍 Start Tracking</button>
   <button id="toggleBtn" class="button">⏸️ Pause</button>
+  <button id="setStartBtn" class="button">🎯 Start/Ziel setzen</button>
   <div id="infoBox">
     ⏱️ Letztes Update: –<br>
     🚀 Geschwindigkeit: –<br>
@@ -63,6 +65,7 @@
     const startBtn = document.getElementById('startBtn');
     const backBtn = document.getElementById('backBtn');
     const toggleBtn = document.getElementById('toggleBtn');
+    const setStartBtn = document.getElementById('setStartBtn');
     const infoBox = document.getElementById('infoBox');
     // Karte initialisieren (mit Default View, wird später durch Standort überschrieben)
     const startCoords = [48.71598339320953, 12.844524979591371];
@@ -123,6 +126,7 @@ L.layerGroup([satellite, labels]).addTo(map);
     let lastUpdateTime = null;
     let currentSpeed = null;
     let gpsWatcher = null;
+    let lastGpsCoords = null;
     let gpsPaused = false;
 
     let distanceToGoal = null;
@@ -305,13 +309,29 @@ L.layerGroup([satellite, labels]).addTo(map);
       }
     }
 
-    function updateDistance() {
+     function updateDistance() {
       if (routePoints.length >= 2) {
         const line = turf.lineString(routePoints.map(p => [p[1], p[0]]));
         totalDistance = turf.length(line, { units: 'meters' });
       } else {
         totalDistance = 0;
       }
+    }
+
+    function refreshRoute() {
+      if (polyline) {
+        map.removeLayer(polyline);
+        polyline = null;
+      }
+      pointMarkers.forEach(m => map.removeLayer(m));
+      pointMarkers.length = 0;
+      routePoints.forEach((latlng, idx) => {
+        const markerColor = getMarkerColor(idx);
+        const marker = L.circleMarker(latlng, { radius: 5, color: markerColor }).addTo(map);
+        pointMarkers.push(marker);
+      });
+      drawPolyline();
+      updateDistance();
     }
 
     startBtn.addEventListener("click", () => {
@@ -371,6 +391,46 @@ L.layerGroup([satellite, labels]).addTo(map);
       }
     });
 
+    setStartBtn.addEventListener("click", () => {
+      if (trackingStarted) {
+        alert("Stoppe das Tracking, um Start/Ziel zu ändern.");
+        return;
+      }
+      if (!navigator.geolocation) {
+        alert("GPS wird nicht unterstützt.");
+        return;
+      }
+      setStartBtn.innerText = "GPS wird geholt...";
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setStartBtn.innerText = "🎯 Start/Ziel setzen";
+          const clicked = [pos.coords.latitude, pos.coords.longitude];
+          let nearestIdx = 0;
+          let minDist = Infinity;
+          routePoints.forEach((p, idx) => {
+            const dist = turf.distance(pointFromLatLng(p), pointFromLatLng(clicked), { units: 'meters' });
+            if (dist < minDist) {
+              minDist = dist;
+              nearestIdx = idx;
+            }
+          });
+          if (nearestIdx !== 0) {
+            const open = routePoints.slice(0, routePoints.length - 1);
+            const rotated = open.slice(nearestIdx).concat(open.slice(0, nearestIdx));
+            rotated.push(rotated[0]);
+            routePoints.length = 0;
+            rotated.forEach(p => routePoints.push(p));
+          }
+          refreshRoute();
+        },
+        (err) => {
+          setStartBtn.innerText = "🎯 Start/Ziel setzen";
+          alert("Standortfehler: " + err.message);
+        },
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
+      );
+    });
+
     function startLiveGPS() {
       if (!navigator.geolocation) {
         alert("GPS wird nicht unterstützt.");
@@ -395,6 +455,7 @@ L.layerGroup([satellite, labels]).addTo(map);
       const lng = pos.coords.longitude;
       const speed = pos.coords.speed;
       const now = Date.now();
+      lastGpsCoords = [lat, lng];
 
       if (!firstPositionSet) {
         countdownStart = now;
