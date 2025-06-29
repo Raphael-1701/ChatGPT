@@ -59,9 +59,13 @@
 
   <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
   <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-<script> 
+<script>
   (function(){
 "use strict";
+    const startBtn = document.getElementById('startBtn');
+    const backBtn = document.getElementById('backBtn');
+    const toggleBtn = document.getElementById('toggleBtn');
+    const infoBox = document.getElementById('infoBox');
     // Karte initialisieren (mit Default View, wird später durch Standort überschrieben)
    const map = L.map('map').setView([47.7, 9.0], 17);
  const satellite = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -132,7 +136,8 @@ L.layerGroup([satellite, labels]).addTo(map);
 
     let totalDistance = 0;
 
-    let speedSamples = [];
+    let speedSum = 0;
+    let speedCount = 0;
     let smoothedSpeed = null;
     const SMOOTHING_FACTOR = 0.2; // Einfluss der aktuellen Geschwindigkeit
     const MAX_SPEED = 70 / 3.6; // 70 km/h in m/s
@@ -286,13 +291,11 @@ L.layerGroup([satellite, labels]).addTo(map);
     }
 
     function updateDistance() {
-      totalDistance = 0;
       if (routePoints.length >= 2) {
-        for (let i = 1; i < routePoints.length; i++) {
-          const from = turf.point([routePoints[i - 1][1], routePoints[i - 1][0]]);
-          const to = turf.point([routePoints[i][1], routePoints[i][0]]);
-          totalDistance += turf.distance(from, to, { units: 'meters' });
-        }
+        const line = turf.lineString(routePoints.map(p => [p[1], p[0]]));
+        totalDistance = turf.length(line, { units: 'meters' });
+      } else {
+        totalDistance = 0;
       }
     }
 
@@ -321,7 +324,8 @@ L.layerGroup([satellite, labels]).addTo(map);
 
       turfLine = turf.lineString(routePoints.map(p => [p[1], p[0]]));
       firstPositionSet = false;
-      speedSamples = [];
+      speedSum = 0;
+      speedCount = 0;
       distanceCovered = 0;
       distanceToGoal = totalDistance;
       totalDistanceTravelled = 0;
@@ -406,19 +410,15 @@ L.layerGroup([satellite, labels]).addTo(map);
       const snappedLatLng = [snapped.geometry.coordinates[1], snapped.geometry.coordinates[0]];
 
       if (currentSpeed !== null) {
-        speedSamples.push(currentSpeed);
+        speedSum += currentSpeed;
+        speedCount += 1;
         if (smoothedSpeed === null) {
           smoothedSpeed = currentSpeed;
         } else {
           smoothedSpeed = smoothedSpeed * (1 - SMOOTHING_FACTOR) + currentSpeed * SMOOTHING_FACTOR;
         }
       }
-      if (speedSamples.length > 0) {
-        const sum = speedSamples.reduce((a, b) => a + b, 0);
-        averageSpeed = sum / speedSamples.length;
-      } else {
-        averageSpeed = 0;
-      }
+      averageSpeed = speedCount > 0 ? speedSum / speedCount : 0;
 
       pointMarkers.forEach(m => {
         if (m.options.color === 'red') map.removeLayer(m);
