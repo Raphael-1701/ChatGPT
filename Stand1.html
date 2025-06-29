@@ -22,8 +22,9 @@
       border-radius: 5px;
       z-index: 1000;
     }
-     #startBtn { left: 10px; }
+    #startBtn { left: 10px; }
     #toggleBtn { left: 140px; background-color: orange; }
+    #setStartBtn { left: 270px; background-color: green; }
 
     #infoBox {
       position: absolute;
@@ -57,6 +58,7 @@
 <body>
   <button id="startBtn" class="button">📍 Start Tracking</button>
   <button id="toggleBtn" class="button">⏸️ Pause</button>
+  <button id="setStartBtn" class="button">🎯 Start/Ziel setzen</button>
   <div id="infoBox">
     ⏱️ Letztes Update: –<br>
     🚀 Geschwindigkeit: –<br>
@@ -91,6 +93,7 @@ const useSimulation = true;
 const startBtn = document.getElementById("startBtn");
 const toggleBtn = document.getElementById("toggleBtn");
 const infoBox = document.getElementById("infoBox");
+const setStartBtn = document.getElementById("setStartBtn");
 
 let simSpeedSlider;
 let simSpeedLabel;
@@ -191,6 +194,7 @@ let smoothedSpeed = null;
 const SMOOTHING_FACTOR = 0.2; // Einfluss der aktuellen Geschwindigkeit
 
 const MAX_SPEED = 70 / 3.6; // 70 km/h in m/s
+let waitingForStartClick = false;
 
 function pointFromLatLng([lat, lng]) {
   return turf.point([lng, lat]);
@@ -372,13 +376,29 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    function updateDistance() {
+     function updateDistance() {
       if (routePoints.length >= 2) {
         const line = turf.lineString(routePoints.map(p => [p[1], p[0]]));
         totalDistance = turf.length(line, { units: 'meters' });
       } else {
         totalDistance = 0;
       }
+    }
+
+    function refreshRoute() {
+      if (polyline) {
+        map.removeLayer(polyline);
+        polyline = null;
+      }
+      pointMarkers.forEach(m => map.removeLayer(m));
+      pointMarkers.length = 0;
+      routePoints.forEach((latlng, idx) => {
+        const markerColor = getMarkerColor(idx);
+        const marker = L.circleMarker(latlng, { radius: 5, color: markerColor }).addTo(map);
+        pointMarkers.push(marker);
+      });
+      drawPolyline();
+      updateDistance();
     }
 
     // "Start Tracking"-Button
@@ -445,7 +465,40 @@ window.addEventListener("DOMContentLoaded", () => {
         startCountdown();
         toggleBtn.innerText = "⏸️ Pause";
         toggleBtn.style.backgroundColor = "orange";
+       }
+    });
+
+    setStartBtn.addEventListener("click", () => {
+      if (trackingStarted) {
+        alert("Stoppe das Tracking, um Start/Ziel zu ändern.");
+        return;
       }
+      waitingForStartClick = true;
+      setStartBtn.innerText = "Karte klicken...";
+    });
+
+    map.on("click", (e) => {
+      if (!waitingForStartClick) return;
+      waitingForStartClick = false;
+      setStartBtn.innerText = "🎯 Start/Ziel setzen";
+      const clicked = [e.latlng.lat, e.latlng.lng];
+      let nearestIdx = 0;
+      let minDist = Infinity;
+      routePoints.forEach((p, idx) => {
+        const dist = turf.distance(pointFromLatLng(p), pointFromLatLng(clicked), { units: 'meters' });
+        if (dist < minDist) {
+          minDist = dist;
+          nearestIdx = idx;
+        }
+      });
+      if (nearestIdx !== 0) {
+        const open = routePoints.slice(0, routePoints.length - 1);
+        const rotated = open.slice(nearestIdx).concat(open.slice(0, nearestIdx));
+        rotated.push(rotated[0]);
+        routePoints.length = 0;
+        rotated.forEach(p => routePoints.push(p));
+      }
+      refreshRoute();
     });
 
     // GPS Live Tracking
