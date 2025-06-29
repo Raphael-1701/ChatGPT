@@ -376,7 +376,7 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-     function updateDistance() {
+      function updateDistance() {
       if (routePoints.length >= 2) {
         const line = turf.lineString(routePoints.map(p => [p[1], p[0]]));
         totalDistance = turf.length(line, { units: 'meters' });
@@ -465,7 +465,7 @@ window.addEventListener("DOMContentLoaded", () => {
         startCountdown();
         toggleBtn.innerText = "⏸️ Pause";
         toggleBtn.style.backgroundColor = "orange";
-       }
+        }
     });
 
     setStartBtn.addEventListener("click", () => {
